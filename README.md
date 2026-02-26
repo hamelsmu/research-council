@@ -15,7 +15,7 @@ Each agent uses the **most powerful model** from its provider with **thinking/re
 The plugin runs a 3-phase pipeline:
 
 1. **Independent Research** — All three agents research the topic simultaneously, each iterating with web searches until they're satisfied with depth and coverage
-2. **Cross-Pollination Refinement** — Each agent reads all three reports and refines its own, using the others as springboards for *new* investigation (not copying)
+2. **Cross-Pollination Refinement** — Each agent reads all three reports and refines its own, using the others as springboards for *new* investigation (not copying). Agents are prompted to be skeptical — they independently verify peer claims via web search rather than accepting them at face value
 3. **Synthesis** — Claude reads all refined reports and produces a single final report organized by theme
 
 The key step is **cross-pollination**. Different AI providers have different training data, search behaviors, and analytical tendencies. When Agent A reads Agent B's report it provides an opportunity to discover angles it missed, contradictions to resolve, and gaps none of the research indpendently covered. This produces research that's substantially deeper than any single agent could achieve alone, or than simply merging three independent reports.
