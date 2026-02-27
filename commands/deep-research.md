@@ -12,7 +12,7 @@ allowed-tools:
   - WebFetch
 ---
 
-First, run the setup script to validate prerequisites and create the research workspace:
+First, run the setup script to validate prerequisites and create the research workspace. **IMPORTANT: Run this in the foreground (do NOT use run_in_background).** You need to read the output to check for errors.
 
 ```bash
 set -o noglob; bash "${CLAUDE_PLUGIN_ROOT}/scripts/setup-research.sh" $ARGUMENTS; _rc=$?; set +o noglob; (exit $_rc)
