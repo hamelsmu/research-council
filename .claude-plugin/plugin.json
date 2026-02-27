@@ -1,6 +1,6 @@
 {
   "name": "research-council",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Deep research across Claude, Codex, and Gemini in parallel with cross-pollination refinement",
   "author": {
     "name": "Hamel Husain"

@@ -12,18 +12,24 @@ allowed-tools:
   - WebFetch
 ---
 
-First, run the setup script to validate prerequisites and create the research workspace. **IMPORTANT: Run this in the foreground (do NOT use run_in_background).** You need to read the output to check for errors.
+Run the setup script to validate prerequisites and create the research workspace:
 
 ```bash
 set -o noglob; bash "${CLAUDE_PLUGIN_ROOT}/scripts/setup-research.sh" $ARGUMENTS; _rc=$?; set +o noglob; (exit $_rc)
 ```
 
-If setup fails, help the user fix the issue (install missing CLIs, set API keys, etc.) and DO NOT proceed further.
+If setup fails (non-zero exit code), help the user fix the issue (install missing CLIs, set API keys, etc.) and DO NOT proceed further.
 
-If setup succeeds, it will print the research ID and a progress log path. Tell the user:
+If setup succeeds (exit code 0), read the state file to get the research details:
+
+```bash
+cat .claude/deep-research.local.md
+```
+
+Extract the research_id, models, and workspace path (`research/<research_id>/`) from the state file. Tell the user:
 
 1. The research council is now active with 3 AI agents (Claude, Codex, Gemini)
-2. They can monitor progress in another terminal with the `tail -f` command shown
+2. They can monitor progress with: `tail -f research/<research_id>/progress.log`
 3. When all agents finish their research and cross-pollination refinement, you will synthesize the final report
 
 Then **finish your response** — the Stop hook will automatically launch all research agents. You do not need to run any additional commands.
