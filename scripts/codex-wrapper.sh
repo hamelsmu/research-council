@@ -65,6 +65,7 @@ for i in $(seq 2 "$MAX_ITERS"); do
   # Codex independently in another terminal during research, this could
   # resume the wrong session. This is a Codex CLI limitation.
   codex exec resume --last \
+    --skip-git-repo-check \
     "$CONTINUE_PROMPT" 2>>"$PROGRESS_LOG" || {
       LAST_ERROR=$?
       log "ERROR: Codex iteration ${i} failed (exit $LAST_ERROR)"
