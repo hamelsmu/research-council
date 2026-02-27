@@ -4,10 +4,10 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that orch
 
 ## How it Works
 
-Run the `/deep-research` slash command inside Claude Code:
+Run the `/research-council:deep-research` slash command inside Claude Code:
 
 ```
-/deep-research Next.js vs SvelteKit for production web apps in 2026: performance, DX, ecosystem maturity, and deployment options
+/research-council:deep-research Next.js vs SvelteKit for production web apps in 2026: performance, DX, ecosystem maturity, and deployment options
 ```
 
 Each agent uses the **most powerful model** from its provider with **thinking/reasoning turned all the way up** (see [Models Used](#models-used)). A `--test` flag is available that swaps in small, cheap models for testing the pipeline.
@@ -122,17 +122,17 @@ claude --plugin-dir /path/to/research-council
 
 ### Full research (production models, up to 10 iterations per agent)
 ```
-/deep-research What are the leading approaches to nuclear fusion energy and how close are they to commercialization?
+/research-council:deep-research What are the leading approaches to nuclear fusion energy and how close are they to commercialization?
 ```
 
 ### Test mode (cheap models, 2 iterations — for testing the pipeline)
 ```
-/deep-research --test What is the history of the Panama Canal?
+/research-council:deep-research --test What is the history of the Panama Canal?
 ```
 
 ### Cancel an active session
 ```
-/cancel-research
+/research-council:cancel-research
 ```
 
 ### Monitor progress
@@ -212,11 +212,11 @@ Common causes: authentication failures, model not available on your subscription
 Monitor `research/<id>/progress.log`. If an agent is stuck, you can cancel with `/cancel-research` and try again. The orchestrator has a 2-hour timeout as a safety net.
 
 ### "A research session is already active"
-Run `/cancel-research` first, or check if a previous session is still running.
+Run `/research-council:cancel-research` first, or check if a previous session is still running.
 
 ## Architecture
 
-The plugin uses Claude Code's Stop hook for orchestration. When you run `/deep-research`, the command creates a state file and finishes. The Stop hook then takes over:
+The plugin uses Claude Code's Stop hook for orchestration. When you run `/research-council:deep-research`, the command creates a state file and finishes. The Stop hook then takes over:
 
 1. Launches all 3 research agents as parallel child processes
 2. Waits for all to complete
