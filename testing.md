@@ -24,34 +24,72 @@ Tests 5 groups (45 tests total):
 
 ### End-to-End Tests (`scripts/run-e2e-test.sh`)
 
-Run with:
+#### Quick-start (copy-paste)
 
 ```bash
-bash scripts/run-e2e-test.sh "What is the history of chess?"
+# 1. Clean up any stale session first
+ps aux | grep -E "claude -p|codex exec|gemini " | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null
+rm -f .claude/deep-research.local.md .claude/deep-research.lock
+
+# 2. Launch in tmux with output capture
+tmux new-session -d -s e2e 'bash scripts/run-e2e-test.sh "What is the history of chess?" 2>&1 | tee /tmp/e2e-test-output.log'
+
+# 3. Monitor (in another terminal)
+tail -f /tmp/e2e-test-output.log           # full output
+tmux ls                                     # session exists = still running
 ```
 
-Or in tmux for background execution:
+#### Expected timeline (test mode)
+
+| Phase | Typical duration | What to expect |
+|-------|-----------------|----------------|
+| Phase 0: Smoke tests | ~35-40s | Claude smoke test is slowest (~35s). Codex/Gemini are fast (~2-4s) |
+| Phase 1: Research | ~2-5 min | Codex finishes first (~1 min). Claude (Haiku) takes ~4 min. Gemini may fail on quota |
+| Phase 2: Refinement | ~5-8 min | Only runs agents that produced Phase 1 reports. Claude is slowest |
+| Phase 3: Synthesis | ~2-3 min | Single Claude agent synthesizes all refined reports |
+| **Total** | **~10-15 min** | Varies by API latency and quota availability |
+
+#### Monitoring a running test
 
 ```bash
-# Launch in detached tmux session
-tmux new-session -d -s e2e 'bash scripts/run-e2e-test.sh "What is chess?"'
+# Watch the captured output
+tail -f /tmp/e2e-test-output.log
 
-# Monitor progress (research ID appears in first few lines of output)
-tmux capture-pane -t e2e -p | head -30          # see research ID
-tail -f research/<id>/progress.log               # follow timestamped progress
-
-# Check only structured log entries (filters out agent stdout noise)
+# Check structured progress entries (filters agent stdout noise)
 grep "^\[" research/<id>/progress.log | tail -20
+
+# Verify agents are alive (not hanging)
+ps aux | grep -E "claude -p|codex exec|gemini " | grep -v grep
+
+# Check agent stdout log sizes (growing = actively working)
+wc -l research/<id>/*-stdout.log research/<id>/*-refine-stdout.log 2>/dev/null
 
 # Check if test is still running
 tmux ls                                           # session exists = still running
-ps aux | grep run-e2e-test | grep -v grep         # process check
+```
 
+**Note:** Claude stdout logs are often empty for minutes due to output buffering — this does NOT mean the agent is hanging. Check that the process is alive with `ps` instead.
+
+#### Cleaning up
+
+```bash
 # Kill a stuck test
 tmux kill-session -t e2e
-# Also kill any orphaned agent processes
+# Kill any orphaned agent processes
 ps aux | grep -E "claude -p|codex exec|gemini " | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null
+# Remove stale state
+rm -f .claude/deep-research.local.md .claude/deep-research.lock
 ```
+
+#### Common blockers
+
+- **"A research session is already active"** — A previous session left state behind. Run the cleanup commands above before launching.
+- **Gemini quota errors** — Gemini CLI hits rate limits frequently. The fatal error detector kills it correctly; the test continues with Claude + Codex only. This is expected behavior, not a test failure.
+- **Claude stdout log empty** — Output buffering. The process is likely alive and working. Verify with `ps`.
+
+#### What counts as a pass
+
+The test succeeds if `run-e2e-test.sh` prints `SUCCESS: Final report written` and exits 0. Partial agent failures (e.g., Gemini quota) are tolerated as long as at least 2/3 agents produce reports.
 
 This runs the full 4-phase pipeline (setup, research, refinement, synthesis) using `--test` mode, which selects cheap/fast models (Haiku, codex-mini, flash-lite) and limits to 2 iterations.
 

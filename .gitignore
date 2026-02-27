@@ -1,15 +1,19 @@
 # Research output (generated per-session)
 research/
-
-# Claude Code local state
-.claude/*.local.md
-.claude/*.local.json
-.claude/*.log
-.claude/*.lock
-.claude/deep-research.log
-
-# Review loop artifacts
 reviews/
+
+# Local runtime/state (contains prompts, logs, and machine-local settings)
+.claude/
+
+# Local scratch and planning artifacts
+plan.md
+tmp/
+.tmp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
 
 # OS files
 .DS_Store

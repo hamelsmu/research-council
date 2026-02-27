@@ -73,19 +73,7 @@ if [ -f "$CLAUDE_REPORT" ] && [ -s "$CLAUDE_REPORT" ]; then
 
   echo "1" > "$CLAUDE_STATE"
 
-  cat > "$CLAUDE_SETTINGS" << SETTINGS_EOF
-{
-  "hooks": {
-    "Stop": [{
-      "hooks": [{
-        "type": "command",
-        "command": "${PLUGIN_ROOT}/scripts/iteration-hook.sh",
-        "timeout": 120
-      }]
-    }]
-  }
-}
-SETTINGS_EOF
+  write_claude_settings "$CLAUDE_SETTINGS" "$PLUGIN_ROOT"
 
   CLAUDE_REFINE_PROMPT="$(build_refinement_prompt "$CLAUDE_REPORT" "Claude" "$CODEX_REPORT" "Codex" "$GEMINI_REPORT" "Gemini" "$CLAUDE_REFINED")"
 
@@ -126,12 +114,13 @@ if [ -f "$CODEX_REPORT" ] && [ -s "$CODEX_REPORT" ]; then
   (
     cd "$PROJECT_DIR"
     bash "${PLUGIN_ROOT}/scripts/codex-wrapper.sh" \
-      "REFINEMENT TASK: ${CODEX_REFINE_PROMPT}" \
+      "$CODEX_REFINE_PROMPT" \
       "$CODEX_REFINED" \
       "$MAX_ITERS" \
       "$CODEX_MODEL" \
       "$CODEX_REASONING" \
-      "$PROGRESS_LOG" > "${WORKSPACE}/codex-refine-stdout.log" 2>&1
+      "$PROGRESS_LOG" \
+      "$TOPIC" > "${WORKSPACE}/codex-refine-stdout.log" 2>&1
     rc=$?
     log "Phase 2: Codex refinement finished (exit $rc)"
     exit $rc
@@ -148,47 +137,20 @@ if [ -f "$GEMINI_REPORT" ] && [ -s "$GEMINI_REPORT" ]; then
   GEMINI_LOCAL_REFINED="refined-report.md"
 
   echo "1" > "$GEMINI_STATE"
-  mkdir -p "${GEMINI_WORKSPACE}/.gemini"
+  write_gemini_settings "$GEMINI_WORKSPACE" "$PLUGIN_ROOT" "refinement-loop"
 
   # Copy input reports INTO Gemini workspace (sandbox can't read outside)
   cp "$GEMINI_REPORT" "${GEMINI_WORKSPACE}/own-report.md" 2>/dev/null || true
   cp "$CLAUDE_REPORT" "${GEMINI_WORKSPACE}/claude-report.md" 2>/dev/null || true
   cp "$CODEX_REPORT" "${GEMINI_WORKSPACE}/codex-report.md" 2>/dev/null || true
 
-  cat > "${GEMINI_WORKSPACE}/.gemini/settings.json" << GEMINI_SETTINGS_EOF
-{
-  "hooksConfig": {"enabled": true},
-  "hooks": {
-    "AfterAgent": [{
-      "matcher": "*",
-      "hooks": [{
-        "name": "refinement-loop",
-        "type": "command",
-        "command": "${PLUGIN_ROOT}/scripts/iteration-hook.sh",
-        "timeout": 30000
-      }]
-    }]
-  }
-}
-GEMINI_SETTINGS_EOF
+  # Use the shared helper with local paths (Gemini sandbox can't read outside its workspace)
+  GEMINI_REFINE_PROMPT="$(build_refinement_prompt \
+    "own-report.md" "Gemini" "claude-report.md" "Claude" "codex-report.md" "Codex" "$GEMINI_LOCAL_REFINED")"
 
-  # Build prompt with LOCAL paths (relative to Gemini workspace)
-  GEMINI_REFINE_PROMPT="${REFINEMENT_PROMPT}
-
-## Research Topic
-${TOPIC}
-
-## Files
-- Your original report (Gemini): own-report.md
-- Other report (Claude): claude-report.md
-- Other report (Codex): codex-report.md
-- Write your REFINED report to: ${GEMINI_LOCAL_REFINED}
-
-Read all three reports, then write your refined report to ${GEMINI_LOCAL_REFINED}."
-
-  cat > "${GEMINI_WORKSPACE}/GEMINI.md" << GEMINI_MD_EOF
-${REFINEMENT_PROMPT}
-GEMINI_MD_EOF
+  # Write full prompt (system + topic + file paths) to GEMINI.md for consistency
+  # with the research phase — Gemini may read GEMINI.md as system instructions.
+  printf '%s\n' "$GEMINI_REFINE_PROMPT" > "${GEMINI_WORKSPACE}/GEMINI.md"
 
   log "Phase 2: Launching Gemini refinement agent"
 

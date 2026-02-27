@@ -233,12 +233,14 @@ echo "=== Test Group 4: No stale references ==="
 RESEARCH_SCRIPT=$(cat "${SCRIPT_DIR}/run-research-phase.sh")
 assert_not_contains "research phase has no claude-stop-hook.sh ref" "claude-stop-hook.sh" "$RESEARCH_SCRIPT"
 assert_not_contains "research phase has no gemini-afteragent-hook.sh ref" "gemini-afteragent-hook.sh" "$RESEARCH_SCRIPT"
-assert_contains "research phase references iteration-hook.sh" "iteration-hook.sh" "$RESEARCH_SCRIPT"
 
 REFINEMENT_SCRIPT=$(cat "${SCRIPT_DIR}/run-refinement-phase.sh")
 assert_not_contains "refinement phase has no claude-stop-hook.sh ref" "claude-stop-hook.sh" "$REFINEMENT_SCRIPT"
 assert_not_contains "refinement phase has no gemini-afteragent-hook.sh ref" "gemini-afteragent-hook.sh" "$REFINEMENT_SCRIPT"
-assert_contains "refinement phase references iteration-hook.sh" "iteration-hook.sh" "$REFINEMENT_SCRIPT"
+
+# iteration-hook.sh reference now lives in phase-common.sh (via write_claude_settings/write_gemini_settings)
+COMMON_LIB=$(cat "${SCRIPT_DIR}/lib/phase-common.sh")
+assert_contains "phase-common.sh references iteration-hook.sh" "iteration-hook.sh" "$COMMON_LIB"
 
 # Test 4b: RESEARCH_HOOK_FORMAT is set for both claude and gemini launches
 assert_contains "research sets HOOK_FORMAT=claude" "RESEARCH_HOOK_FORMAT=claude" "$RESEARCH_SCRIPT"
@@ -254,10 +256,21 @@ assert_not_contains "refinement phase has no kill_tree" "kill_tree" "$REFINEMENT
 assert_contains "research phase sources phase-common.sh" "phase-common.sh" "$RESEARCH_SCRIPT"
 assert_contains "refinement phase sources phase-common.sh" "phase-common.sh" "$REFINEMENT_SCRIPT"
 
-# Test 4e: Orchestrator uses sedi for all sed -i in-place operations
+# Test 4e: Orchestrator uses sedi helper, not raw sed -i
 ORCH_SCRIPT=$(cat "${PLUGIN_ROOT}/hooks/orchestrator-stop-hook.sh")
-SEDI_CALL_COUNT=$(echo "$ORCH_SCRIPT" | grep -c "^  sedi " || true)
-assert_eq "orchestrator uses sedi for all 4 sed-i calls" "4" "$SEDI_CALL_COUNT"
+# Exclude the sedi() function definition and comments, then check no raw 'sed -i' calls remain
+RAW_SED_I=$(echo "$ORCH_SCRIPT" | grep -v '^sedi()' | grep -v '^#' | grep -c 'sed -i' || true)
+assert_eq "orchestrator has no raw sed -i calls" "0" "$RAW_SED_I"
+# Verify sedi is actually used (at least one call)
+SEDI_USAGE=$(echo "$ORCH_SCRIPT" | grep -c 'sedi ' || true)
+TESTS=$((TESTS + 1))
+if [ "$SEDI_USAGE" -gt 0 ]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: orchestrator uses sedi helper (${SEDI_USAGE} calls)"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: orchestrator has no sedi calls"
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════
 echo ""

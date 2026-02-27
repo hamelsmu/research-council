@@ -50,19 +50,7 @@ CLAUDE_SETTINGS="${WORKSPACE}/claude-settings.json"
 
 echo "1" > "$CLAUDE_STATE"
 
-cat > "$CLAUDE_SETTINGS" << SETTINGS_EOF
-{
-  "hooks": {
-    "Stop": [{
-      "hooks": [{
-        "type": "command",
-        "command": "${PLUGIN_ROOT}/scripts/iteration-hook.sh",
-        "timeout": 120
-      }]
-    }]
-  }
-}
-SETTINGS_EOF
+write_claude_settings "$CLAUDE_SETTINGS" "$PLUGIN_ROOT"
 
 CLAUDE_EFFORT_FLAG=""
 if [ "${RESEARCH_TEST_MODE:-false}" = "true" ]; then
@@ -96,15 +84,20 @@ CODEX_REPORT="${WORKSPACE}/codex-report.md"
 
 log "Phase 1: Launching Codex agent (${CODEX_MODEL}, reasoning: ${CODEX_REASONING})"
 
+CODEX_PROMPT="${RESEARCH_PROMPT}
+
+Write your report to: ${CODEX_REPORT}"
+
 (
   cd "$PROJECT_DIR"
   bash "${PLUGIN_ROOT}/scripts/codex-wrapper.sh" \
-    "$TOPIC" \
+    "$CODEX_PROMPT" \
     "$CODEX_REPORT" \
     "$MAX_ITERS" \
     "$CODEX_MODEL" \
     "$CODEX_REASONING" \
-    "$PROGRESS_LOG" > "${WORKSPACE}/codex-stdout.log" 2>&1
+    "$PROGRESS_LOG" \
+    "$TOPIC" > "${WORKSPACE}/codex-stdout.log" 2>&1
   rc=$?
   log "Phase 1: Codex agent finished (exit $rc)"
   exit $rc
@@ -117,24 +110,7 @@ GEMINI_STATE="${WORKSPACE}/gemini-state.txt"
 GEMINI_WORKSPACE="${WORKSPACE}/gemini-workspace"
 
 echo "1" > "$GEMINI_STATE"
-mkdir -p "${GEMINI_WORKSPACE}/.gemini"
-
-cat > "${GEMINI_WORKSPACE}/.gemini/settings.json" << GEMINI_SETTINGS_EOF
-{
-  "hooksConfig": {"enabled": true},
-  "hooks": {
-    "AfterAgent": [{
-      "matcher": "*",
-      "hooks": [{
-        "name": "research-loop",
-        "type": "command",
-        "command": "${PLUGIN_ROOT}/scripts/iteration-hook.sh",
-        "timeout": 30000
-      }]
-    }]
-  }
-}
-GEMINI_SETTINGS_EOF
+write_gemini_settings "$GEMINI_WORKSPACE" "$PLUGIN_ROOT" "research-loop"
 
 GEMINI_LOCAL_REPORT="report.md"
 

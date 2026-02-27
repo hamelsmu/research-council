@@ -215,7 +215,7 @@ Individual agent failures are tolerated — the failed agent is skipped and the 
 Monitor `research/<id>/progress.log`. If an agent is stuck, you can cancel with `/cancel-research` and try again. The orchestrator has a 2-hour timeout as a safety net.
 
 ### Stop hook interfering with other sessions
-The plugin's Stop hook tracks which Claude Code session started the research. While that session is actively running phases (lock held), other sessions will skip the hook silently. If the original session is no longer running phases (e.g., it was closed), a new session will adopt the orphaned research and continue where it left off. State files older than 5 hours are automatically cleaned up.
+The plugin's Stop hook tracks which Claude Code session started the research. If the original session is still actively running phases (its lock is alive — PID exists and lock is less than 2 hours old), other sessions skip the hook silently. If the lock is stale or the original session is gone, a new session automatically adopts the orphaned research: it re-stamps the session ID in the state file and continues from whatever phase was in progress. State files older than 5 hours are automatically cleaned up regardless.
 
 ### "A research session is already active"
 Run `/cancel-research` first, or check if a previous session is still running.

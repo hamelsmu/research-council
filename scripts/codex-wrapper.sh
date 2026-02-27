@@ -1,37 +1,27 @@
 #!/usr/bin/env bash
 # Codex Subagent Wrapper — runs Codex in a bash loop since Codex lacks hooks
 #
-# Usage: codex-wrapper.sh <topic> <report_path> <max_iterations> <model> <reasoning_effort> <progress_log>
+# Usage: codex-wrapper.sh <initial_prompt> <report_path> <max_iterations> <model> <reasoning_effort> <progress_log> [<topic>]
+#
+# The initial prompt is the full instruction set for the first iteration,
+# built by the phase runner. The optional <topic> argument provides a short
+# description for continuation prompts. If omitted, defaults to "(research)".
 
 set -uo pipefail
 
-TOPIC="$1"
+INITIAL_PROMPT="$1"
 REPORT="$2"
 MAX_ITERS="${3:-10}"
 MODEL="${4:-gpt-5.3-codex}"
 REASONING="${5:-xhigh}"
 PROGRESS_LOG="${6:-/dev/null}"
+TOPIC="${7:-(research)}"
 
 log() {
   echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Codex: $*" >> "$PROGRESS_LOG"
 }
 
 REPORT_ABS="$(cd "$(dirname "$REPORT")" && pwd)/$(basename "$REPORT")"
-
-# Build the initial research prompt (simple assignment — no heredoc expansion)
-INITIAL_PROMPT="You are a deep research agent. Conduct thorough, comprehensive research on the following topic:
-
-${TOPIC}
-
-## Instructions
-
-1. Use web search extensively to find current, authoritative information
-2. Write your findings as a well-structured markdown report to: ${REPORT_ABS}
-3. Include: Executive Summary, Key Findings (with citations), Methodology, Open Questions, Sources
-4. Go deep — surface-level summaries are not acceptable
-5. When your research is truly comprehensive, add this marker as the VERY LAST LINE:
-   <!-- RESEARCH_COMPLETE -->
-6. Do NOT add the marker prematurely — only when you have exhausted productive research avenues"
 
 # Build the continuation prompt
 CONTINUE_PROMPT="Continue your deep research on: ${TOPIC}
@@ -71,6 +61,9 @@ for i in $(seq 2 "$MAX_ITERS"); do
   fi
 
   log "Iteration ${i}/${MAX_ITERS}"
+  # NOTE: --last resumes the most recent Codex session. If the user runs
+  # Codex independently in another terminal during research, this could
+  # resume the wrong session. This is a Codex CLI limitation.
   codex exec resume --last \
     "$CONTINUE_PROMPT" 2>>"$PROGRESS_LOG" || {
       LAST_ERROR=$?

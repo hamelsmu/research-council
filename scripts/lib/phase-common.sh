@@ -7,13 +7,15 @@
 #   PHASE_LABEL     — e.g. "Phase 1" or "Phase 2" (used in log messages)
 #
 # Provides:
-#   log()                  — timestamped logging to stdout + progress log
-#   agent_pid(name)        — get PID for a registered agent
-#   agent_log(name)        — get log path for a registered agent
-#   register_agent()       — register an agent name, PID, and log path
-#   record_pids()          — write agent-pids.txt for cancel support
-#   wait_for_agents()      — poll-based wait with log monitoring for fatal errors
-#                            Sets: FAILURES (count of failed agents)
+#   log()                    — timestamped logging to stdout + progress log
+#   agent_pid(name)          — get PID for a registered agent
+#   agent_log(name)          — get log path for a registered agent
+#   register_agent()         — register an agent name, PID, and log path
+#   record_pids()            — write agent-pids.txt for cancel support
+#   write_claude_settings()  — write Claude Stop hook settings JSON
+#   write_gemini_settings()  — write Gemini AfterAgent hook settings JSON
+#   wait_for_agents()        — poll-based wait with log monitoring for fatal errors
+#                              Sets: FAILURES (count of failed agents)
 
 log() {
   echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*" | tee -a "$PROGRESS_LOG"
@@ -42,6 +44,48 @@ record_pids() {
   } > "${WORKSPACE}/agent-pids.txt"
 }
 
+# ── Settings writers ─────────────────────────────────────────────────────
+# Write Claude settings JSON with Stop hook pointing to iteration-hook.sh.
+# Usage: write_claude_settings <output_file> <plugin_root>
+write_claude_settings() {
+  cat > "$1" << EOF
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${2}/scripts/iteration-hook.sh",
+        "timeout": 120
+      }]
+    }]
+  }
+}
+EOF
+}
+
+# Write Gemini settings JSON with AfterAgent hook pointing to iteration-hook.sh.
+# Usage: write_gemini_settings <output_dir> <plugin_root> [hook_name]
+write_gemini_settings() {
+  local settings_dir="$1" plugin_root="$2" hook_name="${3:-research-loop}"
+  mkdir -p "${settings_dir}/.gemini"
+  cat > "${settings_dir}/.gemini/settings.json" << EOF
+{
+  "hooksConfig": {"enabled": true},
+  "hooks": {
+    "AfterAgent": [{
+      "matcher": "*",
+      "hooks": [{
+        "name": "${hook_name}",
+        "type": "command",
+        "command": "${plugin_root}/scripts/iteration-hook.sh",
+        "timeout": 30000
+      }]
+    }]
+  }
+}
+EOF
+}
+
 # ── Fatal error detection ────────────────────────────────────────────────
 # Check an agent's stdout log for patterns that indicate unrecoverable errors.
 # Returns 0 if a fatal pattern is found, 1 if clean.
@@ -54,15 +98,33 @@ check_log_for_fatal_errors() {
     "$logfile" 2>/dev/null
 }
 
-# Kill a running agent (SIGTERM, wait 2s, SIGKILL if needed)
+# Kill a running agent and all its child processes.
+# Tries process-group kill first (covers child CLIs spawned by wrapper
+# subshells), then falls back to killing just the PID.
 kill_agent() {
   local pid="$1"
-  if kill -0 "$pid" 2>/dev/null; then
+  kill -0 "$pid" 2>/dev/null || return 0
+
+  # Try to kill the entire process group rooted at $pid.
+  # The wrapper subshells run in their own pgroup when launched with
+  # set -m or via ( ... ) &, so "kill -- -$pid" targets that group.
+  # If the PGID doesn't match $pid (not a group leader), fall back to
+  # walking /proc / pgrep for descendants.
+  if kill -- -"$pid" 2>/dev/null; then
+    sleep 2
+    kill -0 "$pid" 2>/dev/null && kill -9 -- -"$pid" 2>/dev/null || true
+  else
+    # Fallback: kill descendants individually via pgrep, then the parent
+    local child
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+      kill "$child" 2>/dev/null || true
+    done
     kill "$pid" 2>/dev/null || true
     sleep 2
-    if kill -0 "$pid" 2>/dev/null; then
-      kill -9 "$pid" 2>/dev/null || true
-    fi
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+      kill -9 "$child" 2>/dev/null || true
+    done
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
   fi
 }
 

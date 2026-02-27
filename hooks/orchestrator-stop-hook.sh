@@ -18,8 +18,12 @@ log() {
 # Portable sed -i (macOS vs GNU)
 sedi() { if [[ "$OSTYPE" == "darwin"* ]]; then sed -i '' "$@"; else sed -i "$@"; fi; }
 
-# Escape a string for safe use in sed replacement patterns
-sed_escape() { printf '%s\n' "$1" | sed 's/[&/\]/\\&/g'; }
+# Escape a string for safe use in sed replacement patterns.
+# Must escape \ first (to avoid double-escaping), then & and /.
+sed_escape() { printf '%s\n' "$1" | sed -e 's/[\\]/\\&/g' -e 's/[&/]/\\&/g'; }
+
+# Guard: jq is required by this hook
+command -v jq &>/dev/null || { log "ERROR: jq not found in PATH"; exit 0; }
 
 # On any error, allow exit
 trap 'log "ERROR: hook exited via ERR trap (line $LINENO)"; rm -f ".claude/deep-research.lock"; printf "{\"decision\":\"approve\"}\n"; exit 0' ERR
@@ -133,8 +137,10 @@ if [ -n "$STARTED_AT" ]; then
   fi
 fi
 
-# Extract topic (everything after closing --- in the markdown)
-TOPIC=$(awk '/^---$/{i++; next} i>=2' "$STATE_FILE" | sed '/^$/d')
+# Extract topic (everything after the second --- line in YAML front matter).
+# Only the first two --- lines are treated as delimiters; any --- in the
+# topic body (e.g. user researching YAML syntax) is passed through.
+TOPIC=$(awk '/^---$/ && count<2 {count++; next} count>=2' "$STATE_FILE" | sed '/^$/d')
 
 if [ -z "$TOPIC" ]; then
   log "ERROR: no topic found in state file"

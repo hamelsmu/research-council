@@ -128,6 +128,10 @@ trap 'rm -rf "$SMOKE_DIR"' EXIT
 # macOS ships without GNU timeout; use perl fallback
 if command -v timeout &>/dev/null; then
   TIMEOUT_CMD="timeout"
+elif ! command -v perl &>/dev/null; then
+  echo "Error: Neither 'timeout' (GNU coreutils) nor 'perl' found."
+  echo "Install GNU coreutils: brew install coreutils"
+  exit 1
 else
   # Create a small timeout wrapper script that subshells can call
   TIMEOUT_CMD="${SMOKE_DIR}/timeout-wrapper"
