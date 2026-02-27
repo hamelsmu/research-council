@@ -200,8 +200,8 @@ run_research() {
     rm -f "$STATE_FILE"
     rm -f "$LOCK_FILE"
     REASON="ERROR: No research reports were produced by any agent. Check ${WORKSPACE}/progress.log and the agent stdout logs for errors. Common issues:
-- CLI authentication not set up (run 'codex login')
-- API keys not configured
+- Codex CLI not authenticated (run 'codex login')
+- Claude API key not configured
 - Model names not available on your subscription tier
 
 Review the logs and try again with /deep-research"
