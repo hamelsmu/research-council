@@ -52,6 +52,8 @@ MAX_ITERS=$(parse_field "max_iterations")
 CLAUDE_MODEL=$(parse_field "claude_model")
 CODEX_MODEL=$(parse_field "codex_model")
 CODEX_REASONING=$(parse_field "codex_reasoning")
+GEMINI_ENABLED=$(parse_field "gemini_enabled")
+GEMINI_ENABLED="${GEMINI_ENABLED:-false}"
 
 # Not active → clean up
 if [ "$ACTIVE" != "true" ]; then
@@ -185,13 +187,18 @@ run_research() {
     "$MAX_ITERS" \
     "$CLAUDE_MODEL" \
     "$CODEX_MODEL" \
-    "$CODEX_REASONING"
+    "$CODEX_REASONING" \
+    "$GEMINI_ENABLED"
   RESULT=$?
   log "Phase 1 finished (exit $RESULT)"
 
   # Check if any reports were produced
   REPORTS_FOUND=0
-  for f in "${WORKSPACE}/claude-report.md" "${WORKSPACE}/codex-report.md"; do
+  REPORT_CHECK_FILES=("${WORKSPACE}/claude-report.md" "${WORKSPACE}/codex-report.md")
+  if [ "$GEMINI_ENABLED" = "true" ]; then
+    REPORT_CHECK_FILES+=("${WORKSPACE}/gemini-report.md")
+  fi
+  for f in "${REPORT_CHECK_FILES[@]}"; do
     [ -f "$f" ] && [ -s "$f" ] && REPORTS_FOUND=$((REPORTS_FOUND + 1))
   done
 
@@ -223,7 +230,8 @@ run_refinement() {
     "$MAX_ITERS" \
     "$CLAUDE_MODEL" \
     "$CODEX_MODEL" \
-    "$CODEX_REASONING"
+    "$CODEX_REASONING" \
+    "$GEMINI_ENABLED"
   REFINE_RESULT=$?
   log "Phase 2 finished (exit $REFINE_RESULT)"
 
@@ -232,9 +240,14 @@ run_refinement() {
   MISSING_LIST=""
   AGENT_NAMES=("Claude" "Codex")
   AGENT_FILES=("${WORKSPACE}/claude-refined.md" "${WORKSPACE}/codex-refined.md")
+  if [ "$GEMINI_ENABLED" = "true" ]; then
+    AGENT_NAMES+=("Gemini")
+    AGENT_FILES+=("${WORKSPACE}/gemini-refined.md")
+  fi
+  TOTAL_AGENTS=${#AGENT_NAMES[@]}
   AVAILABLE_COUNT=0
 
-  for i in 0 1; do
+  for i in $(seq 0 $((TOTAL_AGENTS - 1))); do
     f="${AGENT_FILES[$i]}"
     name="${AGENT_NAMES[$i]}"
     if [ -f "$f" ] && [ -s "$f" ]; then
@@ -271,7 +284,7 @@ NOTE: Not all agents produced reports. Missing:${MISSING_LIST}
 Your synthesis should note this reduced coverage in the Methodology section."
   fi
 
-  SYNTHESIS_PROMPT="Research and refinement phases are complete. ${AVAILABLE_COUNT} of 2 AI agents produced refined reports.
+  SYNTHESIS_PROMPT="Research and refinement phases are complete. ${AVAILABLE_COUNT} of ${TOTAL_AGENTS} AI agents produced refined reports.
 
 Topic: ${TOPIC}
 ${COVERAGE_NOTE}

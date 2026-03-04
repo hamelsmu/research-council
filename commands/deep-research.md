@@ -26,9 +26,9 @@ If setup succeeds (exit code 0), read the state file to get the research details
 cat .claude/deep-research.local.md
 ```
 
-Extract the research_id, models, and workspace path (`research/<research_id>/`) from the state file. Tell the user:
+Extract the research_id, models, workspace path (`research/<research_id>/`), and `gemini_enabled` from the state file. Tell the user:
 
-1. The research council is now active with 2 AI agents (Claude, Codex)
+1. The research council is now active with 2 AI agents (Claude, Codex) — or 3 agents (Claude, Codex, Gemini) if `gemini_enabled: true`
 2. They can monitor progress with: `tail -f research/<research_id>/progress.log`
 3. When all agents finish their research and cross-pollination refinement, you will synthesize the final report
 
@@ -38,7 +38,7 @@ When you are given the synthesis prompt (after the research agents complete), re
 
 1. **Executive Summary** — the most important findings across all investigations
 2. **Key Findings** — organized by THEME (not by source agent), with the strongest evidence from all reports
-3. **Areas of Consensus** — where both agents agree, with combined evidence
+3. **Areas of Consensus** — where agents agree, with combined evidence
 4. **Areas of Disagreement** — where agents differed, with analysis of why
 5. **Novel Insights** — unique findings from the cross-pollination refinement round
 6. **Open Questions** — what remains uncertain even after two independent investigations
