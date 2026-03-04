@@ -155,9 +155,35 @@ smoke_codex() {
   echo $((SECONDS - start)) > "$SMOKE_DIR/codex.time"
 }
 
-# Run both in parallel
+# ── Optional Gemini detection ────────────────────────────────────────────
+GEMINI_ENABLED=false
+
+smoke_gemini() {
+  local start=$SECONDS
+  "$TIMEOUT_CMD" 30 curl -s -o "$SMOKE_DIR/gemini.out" -w "%{http_code}" \
+    -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent" \
+    -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{"contents":[{"parts":[{"text":"Reply with OK"}]}]}' \
+    > "$SMOKE_DIR/gemini.http" 2>&1
+  local http_code
+  http_code=$(cat "$SMOKE_DIR/gemini.http" 2>/dev/null || echo "000")
+  if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+    echo 0 > "$SMOKE_DIR/gemini.exit"
+  else
+    echo 1 > "$SMOKE_DIR/gemini.exit"
+  fi
+  echo $((SECONDS - start)) > "$SMOKE_DIR/gemini.time"
+}
+
+# Run required agents in parallel
 smoke_claude &
 smoke_codex &
+
+# Run optional Gemini smoke test if API key is set
+if [ -n "${GEMINI_API_KEY:-}" ]; then
+  smoke_gemini &
+fi
 wait
 
 SMOKE_FAILURES=()
@@ -178,6 +204,18 @@ for agent in claude codex; do
 done
 
 echo ""
+
+# Handle optional Gemini result (warning only, not a hard failure)
+if [ -n "${GEMINI_API_KEY:-}" ]; then
+  GEMINI_EXIT=$(cat "$SMOKE_DIR/gemini.exit" 2>/dev/null || echo 1)
+  GEMINI_ELAPSED=$(cat "$SMOKE_DIR/gemini.time" 2>/dev/null || echo "?")
+  if [ "$GEMINI_EXIT" -eq 0 ]; then
+    echo "  ✓ gemini — OK (${GEMINI_ELAPSED}s)"
+    GEMINI_ENABLED=true
+  else
+    echo "  ⚠ gemini — FAILED (${GEMINI_ELAPSED}s) — continuing without Gemini"
+  fi
+fi
 
 if [ ${#SMOKE_FAILURES[@]} -gt 0 ]; then
   echo "Error: Smoke tests failed for: ${SMOKE_FAILURES[*]}"
@@ -244,6 +282,7 @@ max_iterations: ${MAX_ITERS}
 claude_model: ${CLAUDE_MODEL}
 codex_model: ${CODEX_MODEL}
 codex_reasoning: ${CODEX_REASONING}
+gemini_enabled: ${GEMINI_ENABLED}
 started_at: ${STATE_TIMESTAMP}
 ---
 STATE_EOF
@@ -263,6 +302,9 @@ echo ""
 echo "  Agents:"
 echo "    Claude  →  ${CLAUDE_MODEL}"
 echo "    Codex   →  ${CODEX_MODEL} (reasoning: ${CODEX_REASONING})"
+if [ "$GEMINI_ENABLED" = true ]; then
+  echo "    Gemini  →  gemini-2.5-pro (Deep Research)"
+fi
 echo ""
 echo "  Max iterations per agent: ${MAX_ITERS}"
 echo "  Workspace: ${WORKSPACE}/"

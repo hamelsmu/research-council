@@ -16,6 +16,7 @@ MAX_ITERS="$3"
 CLAUDE_MODEL="$4"
 CODEX_MODEL="$5"
 CODEX_REASONING="$6"
+GEMINI_ENABLED="${7:-false}"
 
 WORKSPACE="${PROJECT_DIR}/research/${RESEARCH_ID}"
 
@@ -29,23 +30,42 @@ PHASE_LABEL="Phase 2"
 # shellcheck source=lib/phase-common.sh
 source "${SCRIPT_DIR}/lib/phase-common.sh"
 
-log "Phase 2: Starting cross-pollination refinement"
+EXPECTED_AGENTS=2
+if [ "$GEMINI_ENABLED" = "true" ]; then
+  EXPECTED_AGENTS=3
+fi
+
+log "Phase 2: Starting cross-pollination refinement (${EXPECTED_AGENTS} agents)"
 
 CLAUDE_REPORT="${WORKSPACE}/claude-report.md"
 CODEX_REPORT="${WORKSPACE}/codex-report.md"
+GEMINI_REPORT="${WORKSPACE}/gemini-report.md"
 
 CLAUDE_REFINED="${WORKSPACE}/claude-refined.md"
 CODEX_REFINED="${WORKSPACE}/codex-refined.md"
+GEMINI_REFINED="${WORKSPACE}/gemini-refined.md"
 
 REFINEMENT_PROMPT="$(cat "${PLUGIN_ROOT}/prompts/refinement-system.md")"
 
 # Helper: build refinement prompt for a specific agent
+# Usage: build_refinement_prompt <own_report> <own_label> <output> <other_label:path> [<other_label:path> ...]
 build_refinement_prompt() {
   local OWN_REPORT="$1"
   local OWN_LABEL="$2"
-  local OTHER1="$3"
-  local OTHER1_LABEL="$4"
-  local OUTPUT="$5"
+  local OUTPUT="$3"
+  shift 3
+
+  local FILES_SECTION="- Your original report (${OWN_LABEL}): ${OWN_REPORT}"
+  while [ $# -gt 0 ]; do
+    local PAIR="$1"
+    local LABEL="${PAIR%%:*}"
+    local PATH_="${PAIR#*:}"
+    FILES_SECTION="${FILES_SECTION}
+- Other report (${LABEL}): ${PATH_}"
+    shift
+  done
+  FILES_SECTION="${FILES_SECTION}
+- Write your REFINED report to: ${OUTPUT}"
 
   echo "${REFINEMENT_PROMPT}
 
@@ -53,11 +73,9 @@ build_refinement_prompt() {
 ${TOPIC}
 
 ## Files
-- Your original report (${OWN_LABEL}): ${OWN_REPORT}
-- Other report (${OTHER1_LABEL}): ${OTHER1}
-- Write your REFINED report to: ${OUTPUT}
+${FILES_SECTION}
 
-Read both reports, then write your refined report to ${OUTPUT}."
+Read all reports, then write your refined report to ${OUTPUT}."
 }
 
 # ── Launch Claude refinement ──────────────────────────────────────────────
@@ -69,7 +87,11 @@ if [ -f "$CLAUDE_REPORT" ] && [ -s "$CLAUDE_REPORT" ]; then
 
   write_claude_settings "$CLAUDE_SETTINGS" "$PLUGIN_ROOT"
 
-  CLAUDE_REFINE_PROMPT="$(build_refinement_prompt "$CLAUDE_REPORT" "Claude" "$CODEX_REPORT" "Codex" "$CLAUDE_REFINED")"
+  CLAUDE_OTHER_REPORTS=("Codex:${CODEX_REPORT}")
+  if [ "$GEMINI_ENABLED" = "true" ] && [ -f "$GEMINI_REPORT" ] && [ -s "$GEMINI_REPORT" ]; then
+    CLAUDE_OTHER_REPORTS+=("Gemini:${GEMINI_REPORT}")
+  fi
+  CLAUDE_REFINE_PROMPT="$(build_refinement_prompt "$CLAUDE_REPORT" "Claude" "$CLAUDE_REFINED" "${CLAUDE_OTHER_REPORTS[@]}")"
 
   CLAUDE_EFFORT_FLAG=""
   if [ "${RESEARCH_TEST_MODE:-false}" = "true" ]; then
@@ -101,7 +123,11 @@ fi
 
 # ── Launch Codex refinement ───────────────────────────────────────────────
 if [ -f "$CODEX_REPORT" ] && [ -s "$CODEX_REPORT" ]; then
-  CODEX_REFINE_PROMPT="$(build_refinement_prompt "$CODEX_REPORT" "Codex" "$CLAUDE_REPORT" "Claude" "$CODEX_REFINED")"
+  CODEX_OTHER_REPORTS=("Claude:${CLAUDE_REPORT}")
+  if [ "$GEMINI_ENABLED" = "true" ] && [ -f "$GEMINI_REPORT" ] && [ -s "$GEMINI_REPORT" ]; then
+    CODEX_OTHER_REPORTS+=("Gemini:${GEMINI_REPORT}")
+  fi
+  CODEX_REFINE_PROMPT="$(build_refinement_prompt "$CODEX_REPORT" "Codex" "$CODEX_REFINED" "${CODEX_OTHER_REPORTS[@]}")"
 
   log "Phase 2: Launching Codex refinement agent"
 
@@ -124,6 +150,59 @@ else
   log "Phase 2: Skipping Codex refinement (no Phase 1 report)"
 fi
 
+# ── Launch Gemini refinement (optional) ──────────────────────────────────
+if [ "$GEMINI_ENABLED" = "true" ] && [ -f "$GEMINI_REPORT" ] && [ -s "$GEMINI_REPORT" ]; then
+  # Gemini can't read local files, so embed report contents inline
+  GEMINI_INLINE_REPORTS=""
+  if [ -f "$CLAUDE_REPORT" ] && [ -s "$CLAUDE_REPORT" ]; then
+    GEMINI_INLINE_REPORTS="${GEMINI_INLINE_REPORTS}
+<report agent=\"Claude\">
+$(cat "$CLAUDE_REPORT")
+</report>"
+  fi
+  if [ -f "$CODEX_REPORT" ] && [ -s "$CODEX_REPORT" ]; then
+    GEMINI_INLINE_REPORTS="${GEMINI_INLINE_REPORTS}
+<report agent=\"Codex\">
+$(cat "$CODEX_REPORT")
+</report>"
+  fi
+
+  GEMINI_OWN_CONTENT="$(cat "$GEMINI_REPORT")"
+
+  GEMINI_REFINE_PROMPT="${REFINEMENT_PROMPT}
+
+## Research Topic
+${TOPIC}
+
+## Your Original Report
+<report agent=\"Gemini\">
+${GEMINI_OWN_CONTENT}
+</report>
+
+## Other Reports
+${GEMINI_INLINE_REPORTS}
+
+Write your REFINED report based on all the reports above."
+
+  log "Phase 2: Launching Gemini refinement agent"
+
+  (
+    cd "$PROJECT_DIR"
+    bash "${PLUGIN_ROOT}/scripts/gemini-wrapper.sh" \
+      "$GEMINI_REFINE_PROMPT" \
+      "$GEMINI_REFINED" \
+      "$PROGRESS_LOG" > "${WORKSPACE}/gemini-refine-stdout.log" 2>&1
+    rc=$?
+    log "Phase 2: Gemini refinement finished (exit $rc)"
+    exit $rc
+  ) &
+  register_agent gemini $! "${WORKSPACE}/gemini-refine-stdout.log"
+else
+  if [ "$GEMINI_ENABLED" = "true" ]; then
+    log "Phase 2: Skipping Gemini refinement (no Phase 1 report)"
+  fi
+fi
+
 # ── Wait for agents ──────────────────────────────────────────────────────
 record_pids
 
@@ -134,7 +213,12 @@ wait_for_agents || {
 
 # ── Report results ────────────────────────────────────────────────────────
 REFINED_FOUND=0
-for f in "$CLAUDE_REFINED" "$CODEX_REFINED"; do
+REFINED_FILES=("$CLAUDE_REFINED" "$CODEX_REFINED")
+if [ "$GEMINI_ENABLED" = "true" ]; then
+  REFINED_FILES+=("$GEMINI_REFINED")
+fi
+
+for f in "${REFINED_FILES[@]}"; do
   if [ -f "$f" ] && [ -s "$f" ]; then
     REFINED_FOUND=$((REFINED_FOUND + 1))
     log "Phase 2: Refined report found: $(basename "$f") ($(wc -l < "$f") lines)"
@@ -152,4 +236,4 @@ for f in "$CLAUDE_REFINED" "$CODEX_REFINED"; do
 done
 
 rm -f "${WORKSPACE}/agent-pids.txt"
-log "Phase 2: Complete (${REFINED_FOUND}/2 refined reports, ${FAILURES} failures)"
+log "Phase 2: Complete (${REFINED_FOUND}/${EXPECTED_AGENTS} refined reports, ${FAILURES} failures)"
