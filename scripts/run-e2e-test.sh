@@ -53,6 +53,8 @@ CLAUDE_MODEL=$(parse_field "claude_model")
 CODEX_MODEL=$(parse_field "codex_model")
 CODEX_REASONING=$(parse_field "codex_reasoning")
 MAX_ITERS=$(parse_field "max_iterations")
+GEMINI_ENABLED=$(parse_field "gemini_enabled")
+GEMINI_ENABLED="${GEMINI_ENABLED:-false}"
 
 WORKSPACE="research/${RESEARCH_ID}"
 PROGRESS_LOG="${WORKSPACE}/progress.log"
@@ -74,7 +76,7 @@ echo ""
 echo "=== Phase 1: Research ==="
 bash "${SCRIPT_DIR}/run-research-phase.sh" \
   "$RESEARCH_ID" "$TOPIC" "$MAX_ITERS" \
-  "$CLAUDE_MODEL" "$CODEX_MODEL" "$CODEX_REASONING"
+  "$CLAUDE_MODEL" "$CODEX_MODEL" "$CODEX_REASONING" "$GEMINI_ENABLED"
 RESEARCH_EXIT=$?
 
 if [ "$RESEARCH_EXIT" -ne 0 ]; then
@@ -84,21 +86,27 @@ fi
 
 # Verify at least 1 report exists
 REPORTS=0
-for f in "${WORKSPACE}/claude-report.md" "${WORKSPACE}/codex-report.md"; do
+EXPECTED_AGENTS=2
+REPORT_CHECK=("${WORKSPACE}/claude-report.md" "${WORKSPACE}/codex-report.md")
+if [ "$GEMINI_ENABLED" = "true" ]; then
+  REPORT_CHECK+=("${WORKSPACE}/gemini-report.md")
+  EXPECTED_AGENTS=3
+fi
+for f in "${REPORT_CHECK[@]}"; do
   [ -f "$f" ] && [ -s "$f" ] && REPORTS=$((REPORTS + 1))
 done
 if [ "$REPORTS" -eq 0 ]; then
   log "FATAL: No reports produced"
   exit 1
 fi
-log "Research complete: ${REPORTS}/2 reports"
+log "Research complete: ${REPORTS}/${EXPECTED_AGENTS} reports"
 
 # ── Phase 2: Refinement ─────────────────────────────────────────────────
 echo ""
 echo "=== Phase 2: Refinement ==="
 bash "${SCRIPT_DIR}/run-refinement-phase.sh" \
   "$RESEARCH_ID" "$TOPIC" "$MAX_ITERS" \
-  "$CLAUDE_MODEL" "$CODEX_MODEL" "$CODEX_REASONING"
+  "$CLAUDE_MODEL" "$CODEX_MODEL" "$CODEX_REASONING" "$GEMINI_ENABLED"
 REFINEMENT_EXIT=$?
 
 if [ "$REFINEMENT_EXIT" -ne 0 ]; then
@@ -108,7 +116,11 @@ fi
 # Collect available refined reports (fall back to originals if needed)
 REPORT_LIST=""
 AVAILABLE=0
-for agent in claude codex; do
+AGENTS_TO_CHECK="claude codex"
+if [ "$GEMINI_ENABLED" = "true" ]; then
+  AGENTS_TO_CHECK="claude codex gemini"
+fi
+for agent in $AGENTS_TO_CHECK; do
   REFINED="${WORKSPACE}/${agent}-refined.md"
   ORIGINAL="${WORKSPACE}/${agent}-report.md"
   if [ -f "$REFINED" ] && [ -s "$REFINED" ]; then
@@ -126,7 +138,7 @@ if [ "$AVAILABLE" -eq 0 ]; then
   log "FATAL: No reports available for synthesis"
   exit 1
 fi
-log "Refinement complete: ${AVAILABLE}/2 refined reports"
+log "Refinement complete: ${AVAILABLE}/${EXPECTED_AGENTS} refined reports"
 
 # ── Phase 3: Synthesis ───────────────────────────────────────────────────
 echo ""

@@ -1,11 +1,11 @@
 {
   "name": "research-council",
   "version": "0.1.6",
-  "description": "Deep research across Claude and Codex in parallel with cross-pollination refinement",
+  "description": "Deep research across Claude (Anthropic), Codex (OpenAI), and optionally Gemini (Google) in parallel with cross-pollination refinement",
   "author": {
     "name": "Hamel Husain"
   },
   "repository": "https://github.com/hamelsmu/research-council",
   "license": "MIT",
-  "keywords": ["deep-research", "multi-agent", "codex", "claude"]
+  "keywords": ["deep-research", "multi-agent", "codex", "claude", "gemini"]
 }

@@ -70,7 +70,7 @@ check_log_for_fatal_errors() {
   [ ! -f "$logfile" ] && return 1
   # Patterns that mean the agent will never succeed (quota, auth, rate limits)
   grep -qiE \
-    'exhausted your capacity|quota.*reset|rate.?limit|unauthorized|authentication failed|Interactive consent could not be obtained|API key.*(invalid|expired|missing)|billing.*not active|account.*suspended|permission denied' \
+    'exhausted your capacity|quota.*reset|rate.?limit|unauthorized|authentication failed|Interactive consent could not be obtained|API key.*(invalid|expired|missing)|billing.*not active|account.*suspended|permission denied|PERMISSION_DENIED|RESOURCE_EXHAUSTED|UNAUTHENTICATED|INVALID_ARGUMENT.*api.key' \
     "$logfile" 2>/dev/null
 }
 

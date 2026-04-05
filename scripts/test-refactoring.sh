@@ -251,9 +251,9 @@ else
   echo "  FAIL: orchestrator has no sedi calls"
 fi
 
-# Test 4e: No gemini references in phase scripts
-assert_not_contains "research phase has no gemini references" "gemini" "$RESEARCH_SCRIPT"
-assert_not_contains "refinement phase has no gemini references" "gemini" "$REFINEMENT_SCRIPT"
+# Test 4e: Phase scripts reference Gemini conditionally (via GEMINI_ENABLED)
+assert_contains "research phase supports gemini" "GEMINI_ENABLED" "$RESEARCH_SCRIPT"
+assert_contains "refinement phase supports gemini" "GEMINI_ENABLED" "$REFINEMENT_SCRIPT"
 
 # ═══════════════════════════════════════════════════════════════════════════
 echo ""
@@ -266,6 +266,7 @@ for script in \
   "${SCRIPT_DIR}/run-refinement-phase.sh" \
   "${PLUGIN_ROOT}/hooks/orchestrator-stop-hook.sh" \
   "${SCRIPT_DIR}/codex-wrapper.sh" \
+  "${SCRIPT_DIR}/gemini-wrapper.sh" \
   "${SCRIPT_DIR}/run-e2e-test.sh"; do
   TESTS=$((TESTS + 1))
   if bash -n "$script" 2>/dev/null; then
@@ -276,6 +277,25 @@ for script in \
     echo "  FAIL: syntax error — $(basename "$script")"
   fi
 done
+
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "=== Test Group 6: gemini-wrapper.sh ==="
+
+# Test 6a: gemini-wrapper.sh exits 1 when GEMINI_API_KEY is unset
+(
+  unset GEMINI_API_KEY
+  bash "${SCRIPT_DIR}/gemini-wrapper.sh" "test prompt" "/tmp/test-report.md" "/dev/null" 2>/dev/null
+) > /dev/null 2>&1
+GEMINI_EXIT=$?
+assert_eq "gemini-wrapper exits 1 without API key" "1" "$GEMINI_EXIT"
+
+# Test 6b: gemini-wrapper.sh exits 1 when GEMINI_API_KEY is empty
+(
+  GEMINI_API_KEY="" bash "${SCRIPT_DIR}/gemini-wrapper.sh" "test prompt" "/tmp/test-report.md" "/dev/null" 2>/dev/null
+) > /dev/null 2>&1
+GEMINI_EXIT=$?
+assert_eq "gemini-wrapper exits 1 with empty API key" "1" "$GEMINI_EXIT"
 
 # ═══════════════════════════════════════════════════════════════════════════
 echo ""
