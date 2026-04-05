@@ -1,5 +1,5 @@
 ---
-description: "Launch deep research across Claude and Codex with cross-pollination"
+description: "Launch deep research across Claude (Anthropic), Codex (OpenAI), and optionally Gemini (Google) with cross-pollination"
 argument-hint: "[--test] <research topic>"
 allowed-tools:
   - Bash

@@ -161,7 +161,7 @@ GEMINI_ENABLED=false
 smoke_gemini() {
   local start=$SECONDS
   "$TIMEOUT_CMD" 30 curl -s -o "$SMOKE_DIR/gemini.out" -w "%{http_code}" \
-    -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent" \
+    -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent" \
     -H "x-goog-api-key: ${GEMINI_API_KEY}" \
     -H "Content-Type: application/json" \
     -d '{"contents":[{"parts":[{"text":"Reply with OK"}]}]}' \
